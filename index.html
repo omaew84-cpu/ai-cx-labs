@@ -1,27 +1,65 @@
 <!DOCTYPE html>
 <html lang="th">
-<head><meta charset="UTF-8"><title>AI CX Labs</title>
-<style>body{font-family:sans-serif;max-width:900px;margin:auto;padding:20px;background:#f6f8fa}h1{color:#0A2540}img{max-width:100%;border:1px solid #ddd;margin:10px 0}.card{background:#fff;padding:20px;border-radius:12px;margin:20px 0}</style>
-</head><body>
-<h1>AI CX Labs - AI Customer Service Market 2026</h1>
-<div class="card">
-<h2>การเติบโตตลาด</h2>
-<img src="market_growth.jpg" alt="market">
-<p>SAM 2024: $12B → 2034: $125B | SOM (18%): $2.16B → $22.5B</p>
-</div>
-<div class="card">
-<h2>ส่วนแบ่งภูมิภาค 2024</h2>
-<img src="regional_share.jpg" alt="pie">
-</div>
-<div class="card">
-<h2>ข่าวล่าสุด มิ.ย. 2026</h2>
-<ul>
-<li>NiCE เปิดตัว agentic AI native</li>
-<li>TCS: AI เป็น growth driver ใหญ่สุด</li>
-<li>Gartner: 91% ให้ AI เป็น priority #1</li>
-<li>Intercom: มีแค่ 10% ทำ AI mature</li>
-<li>Voice AI จะแตะ $47.5B ปี 2034</li>
-</ul>
-<a href="report.pdf">ดาวน์โหลดรายงาน PDF</a>
-</div>
-</body></html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI CX Labs | AI Customer Service Market 2026</title>
+<style>
+:root{--navy:#0A2540;--teal:#00D4B1;--bg:#f6f8fa}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,"Sarabun",sans-serif;background:var(--bg);color:#1a1a1a}
+header{background:var(--navy);color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0}
+header h1{margin:0;font-size:20px}button.lang{background:var(--teal);border:0;color:#003;padding:8px 14px;border-radius:20px;font-weight:600;cursor:pointer}
+.container{max-width:960px;margin:auto;padding:20px}
+.card{background:#fff;border-radius:16px;padding:24px;margin:20px 0;box-shadow:0 4px 12px rgba(0,0,0,.06)}
+h2{color:var(--navy);margin-top:0}img{max-width:100%;height:auto;border-radius:8px;border:1px solid #e5e7eb}
+.grid{display:grid;gap:20px}@media(min-width:768px){.grid{grid-template-columns:1fr 1fr}}
+.news li{margin:8px 0}.th{display:block}.en{display:none}body.en .th{display:none}body.en .en{display:block}
+footer{text-align:center;color:#666;padding:30px;font-size:14px}
+a.btn{display:inline-block;background:var(--navy);color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;margin-top:10px}
+</style>
+</head>
+<body>
+<header>
+  <h1>AI CX Labs</h1>
+  <button class="lang" onclick="document.body.classList.toggle('en')">TH / EN</button>
+</header>
+
+<div class="container">
+  <div class="card">
+    <div class="th"><h2>ตลาด AI-driven Customer Service 2024–2034</h2><p>รายงานตลาดสองภาษา พร้อมข่าวล่าสุด มิ.ย. 2026</p></div>
+    <div class="en"><h2>AI-driven Customer Service Market 2024–2034</h2><p>Bilingual market report with latest news – June 2026</p></div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="th"><h2>การเติบโต SAM / SOM</h2></div>
+      <div class="en"><h2>SAM / SOM Growth</h2></div>
+      <img src="market_growth.jpg" alt="market growth">
+      <div class="th"><p><b>SAM:</b> $12B (2024) → $125B (2034) | <b>SOM 18%:</b> $2.16B → $22.5B</p></div>
+      <div class="en"><p><b>SAM:</b> $12B (2024) → $125B (2034) | <b>SOM 18%:</b> $2.16B → $22.5B</p></div>
+    </div>
+    <div class="card">
+      <div class="th"><h2>ส่วนแบ่งภูมิภาค 2024</h2></div>
+      <div class="en"><h2>Regional Share 2024</h2></div>
+      <img src="regional_share.jpg" alt="regional">
+      <div class="th"><p>North America 42% | Europe 25% | APAC 22% | LATAM 6% | MEA 5%</p></div>
+      <div class="en"><p>North America 42% | Europe 25% | APAC 22% | LATAM 6% | MEA 5%</p></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="th"><h2>ข่าวล่าสุด</h2>
+      <ul class="news">
+        <li><b>NiCE:</b> เปิดตัวแพลตฟอร์ม agentic AI native สำหรับ CX</li>
+        <li><b>TCS AGM:</b> AI เป็น growth driver ใหญ่สุด, เริ่ม deploy Agentic AI</li>
+        <li><b>Gartner:</b> 91% ผู้นำให้ความสำคัญ AI สำหรับ first-contact resolution</li>
+        <li><b>Intercom 2026:</b> มีเพียง 10% ที่ทำ AI ระดับ mature</li>
+        <li><b>Voice AI:</b> คาดตลาด $47.5B ปี 2034, เร็วขึ้น 35%</li>
+      </ul>
+    </div>
+    <div class="en"><h2>Latest News</h2>
+      <ul class="news">
+        <li><b>NiCE:</b> Launches agentic AI-native CX platform</li>
+        <li><b>TCS AGM:</b> AI named biggest growth driver, rolling out Agentic AI</li>
+        <li><b>Gartner:</b> 91% of leaders prioritize AI for first-contact resolution</li>
+        <li><b>Intercom 2026:</b> Only 10% reach
