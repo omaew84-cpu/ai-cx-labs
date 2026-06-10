@@ -1,81 +1,670 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AI CX Labs — AI-driven Customer Service Market 2026</title>
-<style>
-body{margin:0;font-family:system-ui,sans-serif;background:#f6f8fa;color:#1a1a1a}
-header{background:#0A2540;color:#fff;padding:12px 18px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0}
-header .brand{display:flex;align-items:center;gap:8px;font-weight:700}
-header img{height:26px;border-radius:4px}
-button.lang{background:#00D4B1;border:0;padding:6px 12px;border-radius:20px;font-weight:600}
-.hero img{width:100%;height:auto;display:block}
-.wrap{max-width:960px;margin:auto;padding:20px}
-.card{background:#fff;border-radius:14px;padding:22px;margin:18px 0;box-shadow:0 4px 12px rgba(0,0,0,.06)}
-h1,h2{color:#0A2540;margin:0 0 10px}
-.btn{display:inline-block;background:#00D4B1;color:#0A2540;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:700;margin-top:8px}
-.grid{display:grid;gap:16px}
-@media(min-width:720px){.grid{grid-template-columns:1fr 1fr}}
-img.chart{width:100%;border-radius:10px;border:1px solid #e5e7eb}
-.th{display:block}.en{display:none}
-body.en .th{display:none}body.en .en{display:block}
-footer{text-align:center;color:#667085;font-size:13px;padding:30px 0}
-</style>
+<!-- Playables SDK -->
+<script>// Playables SDK v1.0.0
+// Game lifecycle bridge: rAF-based game-ready detection + event communication
+(function() {
+  'use strict';
+
+  // Idempotency: skip if already initialized (e.g., server-side injection
+  // followed by client-side inject-javascript via the Bloks webview component).
+  if (window.playablesSDK) return;
+
+  var HANDLER_NAME = 'playablesGameEventHandler';
+  var ANDROID_BRIDGE_NAME = '_MetaPlayablesBridge';
+  var RAF_FRAME_THRESHOLD = 3;
+
+  var gameReadySent = false;
+  var firstInteractionSent = false;
+  var errorSent = false;
+  var frameCount = 0;
+  var originalRAF = window.requestAnimationFrame;
+
+  // --- Transport Layer ---
+
+  function hasIOSBridge() {
+    return !!(window.webkit &&
+              window.webkit.messageHandlers &&
+              window.webkit.messageHandlers[HANDLER_NAME]);
+  }
+
+  function hasAndroidBridge() {
+    return !!(window[ANDROID_BRIDGE_NAME] &&
+              typeof window[ANDROID_BRIDGE_NAME].postEvent === 'function');
+  }
+
+  function isInIframe() {
+    return !!(window.parent && window.parent !== window);
+  }
+
+  function sendEvent(eventName, payload) {
+    var message = {
+      type: eventName,
+      payload: payload || {},
+      timestamp: Date.now()
+    };
+
+    if (hasIOSBridge()) {
+      try {
+        window.webkit.messageHandlers[HANDLER_NAME].postMessage(message);
+      } catch (e) { /* ignore */ }
+      return;
+    }
+
+    if (hasAndroidBridge()) {
+    try {
+      var p = payload || {};
+      p.__secureToken = window.__fbAndroidBridgeAuthToken || '';
+      p.timestamp = message.timestamp;
+      window[ANDROID_BRIDGE_NAME].postEvent(
+        eventName,
+        JSON.stringify(p)
+      );
+    } catch (e) { /* ignore */ }
+    return;
+  }
+
+    if (isInIframe()) {
+      try {
+        window.parent.postMessage(message, '*');
+      } catch (e) { /* ignore */ }
+      return;
+    }
+  }
+
+  // --- rAF Game-Ready Detection ---
+
+  function onFrame() {
+    if (gameReadySent) return;
+
+    frameCount++;
+    if (frameCount >= RAF_FRAME_THRESHOLD) {
+      gameReadySent = true;
+      sendEvent('game_ready', {
+        frame_count: frameCount,
+        detected_at: Date.now()
+      });
+      return;
+    }
+
+    originalRAF.call(window, onFrame);
+  }
+
+  if (originalRAF) {
+    window.requestAnimationFrame = function(callback) {
+      if (!gameReadySent) {
+        return originalRAF.call(window, function(timestamp) {
+          frameCount++;
+          if (frameCount >= RAF_FRAME_THRESHOLD && !gameReadySent) {
+            gameReadySent = true;
+            sendEvent('game_ready', {
+              frame_count: frameCount,
+              detected_at: Date.now()
+            });
+          }
+          callback(timestamp);
+        });
+      }
+      return originalRAF.call(window, callback);
+    };
+  }
+
+  // --- First User Interaction Detection ---
+
+  function setupFirstInteractionDetection() {
+    var events = ['touchstart', 'mousedown', 'keydown'];
+
+    function onFirstInteraction() {
+      if (firstInteractionSent) return;
+      firstInteractionSent = true;
+      sendEvent('user_interaction_start', null);
+
+      for (var i = 0; i < events.length; i++) {
+        document.removeEventListener(events[i], onFirstInteraction, true);
+      }
+    }
+
+    for (var i = 0; i < events.length; i++) {
+      document.addEventListener(events[i], onFirstInteraction, true);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupFirstInteractionDetection);
+  } else {
+    setupFirstInteractionDetection();
+  }
+
+  // --- Auto Error Capture ---
+
+  window.addEventListener('error', function(event) {
+    if (errorSent) return;
+    errorSent = true;
+    sendEvent('error', {
+      message: event.message || 'Unknown error',
+      source: event.filename || '',
+      lineno: event.lineno || 0,
+      colno: event.colno || 0,
+      auto_captured: true
+    });
+  });
+
+  window.addEventListener('unhandledrejection', function(event) {
+    if (errorSent) return;
+    errorSent = true;
+    var reason = event.reason;
+    sendEvent('error', {
+      message: (reason instanceof Error) ? reason.message : String(reason),
+      type: 'unhandled_promise_rejection',
+      auto_captured: true
+    });
+  });
+
+  // --- Public API ---
+
+  window.playablesSDK = {
+    complete: function(score) {
+      sendEvent('game_ended', {
+        score: score,
+        completed: true
+      });
+    },
+
+    error: function(message) {
+      if (errorSent) return;
+      errorSent = true;
+      sendEvent('error', {
+        message: message || 'Unknown error',
+        auto_captured: false
+      });
+    },
+
+    sendEvent: function(eventName, payload) {
+      if (!eventName || typeof eventName !== 'string') return;
+      sendEvent(eventName, payload);
+    }
+  };
+
+  // Kick off rAF detection in case no game code calls rAF immediately
+  if (originalRAF) {
+    originalRAF.call(window, onFrame);
+  }
+})();</script>
+<!-- PLAYABLE_TOUCH_PATCH_V1 --><script>
+(function() {
+  if (window.__playableTouchPatchInstalled) return;
+  window.__playableTouchPatchInstalled = true;
+  var origAdd = EventTarget.prototype.addEventListener;
+  var blockedTypes = { touchstart: 1, touchmove: 1, wheel: 1 };
+  EventTarget.prototype.addEventListener = function(type, listener, options) {
+    if (blockedTypes[type]) {
+      if (options === undefined || options === null) {
+        options = { passive: true };
+      } else if (typeof options === 'boolean') {
+        options = { capture: options, passive: true };
+      } else {
+        options = Object.assign({}, options, { passive: true });
+      }
+    }
+    return origAdd.call(this, type, listener, options);
+  };
+})();
+</script><script>window.Intl=window.Intl||{};Intl.t=function(s){return(Intl._locale&&Intl._locale[s])||s;};</script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI CX Labs — ตลาด AI Customer Experience $117B | 2026-2034</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            font-family: 'Prompt', system-ui, -apple-system, sans-serif;
+        }
+        .display { font-family: 'Space Grotesk', 'Prompt', sans-serif; }
+        body {
+            background: #050014;
+            overflow-x: hidden;
+        }
+        .glass {
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+        .glass-strong {
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+        .gradient-text {
+            background: linear-gradient(135deg, #A78BFA 0%, #EC4899 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .mesh-bg {
+            background: 
+                radial-gradient(at 20% 20%, rgba(124, 58, 237, 0.4) 0px, transparent 50%),
+                radial-gradient(at 80% 20%, rgba(236, 72, 153, 0.35) 0px, transparent 50%),
+                radial-gradient(at 50% 80%, rgba(76, 29, 149, 0.5) 0px, transparent 50%),
+                #050014;
+        }
+        .orb {
+            filter: blur(80px);
+            animation: float 20s infinite ease-in-out;
+        }
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            33% { transform: translate(30px, -30px) scale(1.1); }
+            66% { transform: translate(-20px, 20px) scale(0.9); }
+        }
+        .shimmer {
+            position: relative;
+            overflow: hidden;
+        }
+        .shimmer::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            animation: shimmer 3s infinite;
+        }
+        @keyframes shimmer {
+            100% { left: 100%; }
+        }
+    </style>
 </head>
-<body>
-<header>
-  <div class="brand"><img src="logo.png" alt="logo"><span>AI CX Labs</span></div>
-  <button class="lang" onclick="document.body.classList.toggle('en')">TH / EN</button>
-</header>
+<body class="text-white antialiased">
+    <div class="fixed inset-0 mesh-bg"></div>
+    <div class="fixed inset-0 pointer-events-none">
+        <div class="orb absolute -top-40 -left-40 w-[600px] h-[600px] rounded-full bg-[#7C3AED] opacity-30"></div>
+        <div class="orb absolute -bottom-40 -right-40 w-[500px] h-[500px] rounded-full bg-[#EC4899] opacity-25" style="animation-delay: -7s"></div>
+        <div class="orb absolute top-1/2 left-1/2 w-[400px] h-[400px] rounded-full bg-[#4C1D95] opacity-30" style="animation-delay: -14s"></div>
+    </div>
 
-<div class="hero">
-  <img src="hero.jpg" alt="AI Customer Service">
-</div>
+    <!-- HERO -->
+    <section class="relative min-h-screen flex items-center">
+        <div class="relative z-10 w-full max-w-7xl mx-auto px-6 py-20 lg:py-28">
+            <!-- Header -->
+            <div class="flex justify-between items-center mb-16">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-[#7C3AED] to-[#EC4899] flex items-center justify-center font-bold text-lg shadow-lg shadow-purple-900/30">AI</div>
+                    <span class="display font-bold text-xl tracking-tight">CX Labs</span>
+                </div>
+                <div class="hidden md:flex items-center gap-2 text-xs glass px-4 py-2 rounded-full">
+                    <span class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
+                    Live Market Intelligence 2026
+                </div>
+            </div>
 
-<div class="wrap">
-  <div class="card">
-    <div class="th">
-      <h1>ตลาด AI Customer Service 2026</h1>
-      <p><b>SAM</b> เติบโตจาก <b>$12.06B (2024)</b> → <b>$47.82B (2030)</b> → <b>$117.87B (2034)</b> CAGR 25.2%</p>
-      <p>TAM 2024: $600B | SOM 15-20%: $1.81–2.41B</p>
-      <a class="btn" href="report.pdf" target="_blank">ดาวน์โหลดรายงาน PDF</a>
-    </div>
-    <div class="en">
-      <h1>AI-driven Customer Service Market 2026</h1>
-      <p><b>SAM</b> grows from <b>$12.06B (2024)</b> → <b>$47.82B (2030)</b> → <b>$117.87B (2034)</b> CAGR 25.2%</p>
-      <p>TAM 2024: $600B | SOM 15-20%: $1.81–2.41B</p>
-      <a class="btn" href="report.pdf" target="_blank">Download PDF Report</a>
-    </div>
-  </div>
+            <div class="grid lg:grid-cols-2 gap-16 items-center">
+                <div>
+                    <div class="inline-flex items-center gap-2 glass px-3 py-1.5 rounded-full text-xs mb-6">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+                        AI Customer Experience Market Report
+                    </div>
+                    
+                    <h1 class="display text-[clamp(2.5rem,6vw,4.5rem)] font-bold leading-[0.9] tracking-tight mb-6">
+                        ตลาด AI CX
+                        <span class="block gradient-text">กำลังระเบิด</span>
+                    </h1>
+                    
+                    <p class="text-lg text-zinc-300 leading-relaxed mb-3 max-w-xl">
+                        The $117B Revolution in Customer Experience. จากแชทบอทธรรมดาสู่ Agentic AI ที่เข้าใจอารมณ์ ทำนายความต้องการ และปิดการขายอัตโนมัติ
+                    </p>
+                    <p class="text-sm text-zinc-400 mb-10">Serviceable Addressable Market (SAM) สำหรับ AI-Native CX Platforms</p>
 
-  <div class="card">
-    <div class="th"><h2>ภาพรวมตลาด</h2></div>
-    <div class="en"><h2>Market Overview</h2></div>
-    <div class="grid">
-      <img class="chart" src="market_growth.jpg" alt="Market Growth">
-      <img class="chart" src="regional_share.jpg" alt="Regional Share">
-    </div>
-    <div class="th" style="margin-top:12px;font-size:14px;color:#475467">
-      North America 42% | Europe 23% | Asia-Pacific 22% | Latin America 8% | MEA 5%
-    </div>
-    <div class="en" style="margin-top:12px;font-size:14px;color:#475467">
-      North America 42% | Europe 23% | Asia-Pacific 22% | Latin America 8% | MEA 5%
-    </div>
-  </div>
+                    <!-- Download Buttons -->
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <a href="#" class="group relative overflow-hidden glass-strong px-6 py-3.5 rounded-2xl font-medium transition-all hover:scale-[1.02] hover:bg-white/10 text-center">
+                            <div class="absolute inset-0 bg-gradient-to-r from-[#7C3AED]/20 to-[#EC4899]/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                            <span class="relative flex items-center justify-center gap-2">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                ดาวน์โหลดรายงาน (ไทย)
+                            </span>
+                        </a>
+                        <a href="#" class="group px-6 py-3.5 rounded-2xl font-medium bg-white text-black hover:bg-zinc-200 transition-all hover:scale-[1.02] text-center">
+                            <span class="flex items-center justify-center gap-2">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                Download Report (EN)
+                            </span>
+                        </a>
+                    </div>
 
-  <div class="card">
-    <div class="th">
-      <h2>ทำไมต้องตอนนี้</h2>
-      <p>• ลดต้นทุน 30% • แก้ไขอัตโนมัติ 55-65% • เร็วกว่า 10 เท่า • Human-in-the-loop สำหรับเคสซับซ้อน</p>
-    </div>
-    <div class="en">
-      <h2>Why Now</h2>
-      <p>• 30% cost reduction • 55-65% auto-resolution • 10x faster • Human final for complex cases</p>
-    </div>
-  </div>
-</div>
+                    <!-- NotebookLM Button - NEW REQUIREMENT -->
+                    <div class="mt-4">
+                        <a href="https://notebooklm.google.com/notebook/f95b23ae-90ea-41da-b62b-fac4398b11ff?utm_source=nlmm_share" target="_blank" rel="noopener" class="group w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3 rounded-2xl font-medium border border-white/30 hover:border-white/60 hover:bg-white/5 transition-all text-sm backdrop-blur-xl">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                            <span>เปิดดูใน NotebookLM / View in NotebookLM</span>
+                            <span class="text-[10px] px-1.5 py-0.5 rounded bg-white/15 border border-white/20">LIVE</span>
+                        </a>
+                        <p class="text-[11px] text-zinc-500 mt-2 ml-1">แหล่งข้อมูลเชิงลึกแบบ interactive พร้อมสรุปและถาม-ตอบ</p>
+                    </div>
+                </div>
 
-<footer>© 2026 AI CX Labs — omaew84-cpu.github.io/ai-cx-labs</footer>
+                <!-- Market Numbers Card -->
+                <div class="relative">
+                    <div class="glass-strong rounded-[2.5rem] p-8 md:p-10 shadow-2xl shadow-purple-950/40 shimmer">
+                        <div class="flex items-center justify-between mb-8">
+                            <h3 class="font-semibold text-zinc-200">SAM Growth Trajectory</h3>
+                            <div class="text-xs px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/20">CAGR 38.5%</div>
+                        </div>
+
+                        <!-- BIG NUMBERS -->
+                        <div class="space-y-6">
+                            <div>
+                                <div class="text-xs text-zinc-400 mb-1">2026 → 2030 → 2034</div>
+                                <div class="flex items-baseline gap-2 flex-wrap">
+                                    <div class="display text-5xl md:text-6xl font-bold tracking-tight">$12.06B</div>
+                                    <svg class="text-zinc-600" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+                                    <div class="display text-5xl md:text-6xl font-bold tracking-tight gradient-text">$47.82B</div>
+                                    <svg class="text-zinc-600" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+                                    <div class="display text-5xl md:text-6xl font-bold tracking-tight">$117.87B</div>
+                                </div>
+                                <div class="text-sm text-zinc-400 mt-2">เติบโตเกือบ 10 เท่าใน 8 ปี</div>
+                            </div>
+
+                            <div class="h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
+
+                            <div class="grid grid-cols-2 gap-6">
+                                <div class="glass rounded-2xl p-5">
+                                    <div class="text-xs text-zinc-400 mb-1">Total Addressable Market</div>
+                                    <div class="display text-3xl font-bold">$600B+</div>
+                                    <div class="text-xs text-zinc-500 mt-1">CX software, services & BPO by 2034</div>
+                                </div>
+                                <div class="glass rounded-2xl p-5">
+                                    <div class="text-xs text-zinc-400 mb-1">AI Penetration</div>
+                                    <div class="display text-3xl font-bold">82%</div>
+                                    <div class="text-xs text-zinc-500 mt-1">of interactions by 2034</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Mini chart -->
+                        <div class="mt-8 h-[80px] flex items-end gap-2">
+                            <div class="flex-1 h-[20%] bg-gradient-to-t from-[#4C1D95] to-[#7C3AED] rounded-t-lg opacity-60"></div>
+                            <div class="flex-1 h-[35%] bg-gradient-to-t from-[#4C1D95] to-[#7C3AED] rounded-t-lg opacity-70"></div>
+                            <div class="flex-1 h-[50%] bg-gradient-to-t from-[#7C3AED] to-[#A78BFA] rounded-t-lg opacity-80"></div>
+                            <div class="flex-1 h-[68%] bg-gradient-to-t from-[#7C3AED] to-[#EC4899] rounded-t-lg"></div>
+                            <div class="flex-1 h-[85%] bg-gradient-to-t from-[#7C3AED] to-[#EC4899] rounded-t-lg"></div>
+                            <div class="flex-1 h-[100%] bg-gradient-to-t from-[#EC4899] to-[#F9A8D4] rounded-t-lg shadow-lg shadow-pink-500/20"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- MARKET OVERVIEW -->
+    <section class="relative py-24 border-t border-white/5">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="max-w-2xl mb-14">
+                <h2 class="display text-4xl md:text-5xl font-bold mb-4">ภาพรวมตลาด / <span class="text-zinc-500">Market Overview</span></h2>
+                <p class="text-zinc-400">AI CX ไม่ใช่แค่แชทบอทอีกต่อไป — มันคือระบบปฏิบัติการสำหรับรายได้ทั้งหมด</p>
+            </div>
+
+            <div class="grid md:grid-cols-3 gap-6">
+                <div class="glass rounded-3xl p-8 hover:bg-white/[0.08] transition-all group">
+                    <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#7C3AED] to-[#4C1D95] flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M12 20V10M18 20V4M6 20v-6"/></svg>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-3">SAM เติบโต 10 เท่า</h3>
+                    <p class="text-zinc-400 text-sm leading-relaxed">จาก $12.06B ในปี 2026 เป็น $117.87B ในปี 2034 ขับเคลื่อนโดย Agentic AI ที่สามารถขาย แก้ปัญหา และรักษาลูกค้าได้เองโดยไม่ต้องมีมนุษย์</p>
+                    <div class="mt-6 text-xs font-mono text-zinc-500">2026:12.06 → 2028:24.3 → 2030:47.82 → 2032:78.4 → 2034:117.87</div>
+                </div>
+
+                <div class="glass rounded-3xl p-8 hover:bg-white/[0.08] transition-all group">
+                    <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#EC4899] to-[#7C3AED] flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-3">TAM $600B+</h3>
+                    <p class="text-zinc-400 text-sm leading-relaxed">ตลาดประสบการณ์ลูกค้าทั้งหมด (ซอฟต์แวร์, BPO, คอนแทคเซ็นเตอร์) จะถูก AI เข้ามาแทนที่กว่า 70% ภายในปี 2034 มูลค่ารวมกว่า 6 แสนล้านดอลลาร์</p>
+                    <div class="mt-6 flex -space-x-2">
+                        <div class="w-8 h-8 rounded-full bg-[#4C1D95] border-2 border-black flex items-center justify-center text-[10px]">CC</div>
+                        <div class="w-8 h-8 rounded-full bg-[#7C3AED] border-2 border-black flex items-center justify-center text-[10px]">CRM</div>
+                        <div class="w-8 h-8 rounded-full bg-[#EC4899] border-2 border-black flex items-center justify-center text-[10px]">BPO</div>
+                        <div class="w-8 h-8 rounded-full bg-zinc-800 border-2 border-black flex items-center justify-center text-[10px]">+3</div>
+                    </div>
+                </div>
+
+                <div class="glass rounded-3xl p-8 hover:bg-white/[0.08] transition-all group">
+                    <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-600 to-pink-600 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M12 8V4H8"/><rect x="4" y="12" width="8" height="8" rx="2"/><path d="M20 12v-2a2 2 0 0 0-2-2h-2"/><path d="M20 20h-2"/></svg>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-3">Generative & Agentic Shift</h3>
+                    <p class="text-zinc-400 text-sm leading-relaxed">ปี 2026-2027 เป็นยุค Copilot ช่วยคน ปี 2028+ คือยุค Agent ทำงานแทนคน 100% — ตอบ, ขาย, คืนเงิน, upsell ได้เอง</p>
+                    <div class="mt-6 text-xs inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 border border-white/10">
+                        <span class="w-1.5 h-1.5 rounded-full bg-pink-400 animate-pulse"></span>
+                        82% autonomous by 2034
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- WHY NOW -->
+    <section class="relative py-24">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="grid lg:grid-cols-5 gap-12 items-start">
+                <div class="lg:col-span-2">
+                    <h2 class="display text-4xl font-bold mb-4">ทำไมต้องตอนนี้<br><span class="gradient-text">Why Now</span></h2>
+                    <p class="text-zinc-400">4 แรงขับเคลื่อนที่ทำให้ 2026 เป็นจุด انفlection</p>
+                </div>
+                <div class="lg:col-span-3 grid sm:grid-cols-2 gap-4">
+                    <div class="glass rounded-2xl p-6">
+                        <div class="text-3xl font-bold display gradient-text">90% ↓</div>
+                        <div class="font-medium mt-1 mb-2">ต้นทุน LLM ลดลง</div>
+                        <p class="text-sm text-zinc-400">จาก $20/1M tokens เหลือ $2 ทำให้ AI CX คุ้มทุนแม้ธุรกิจ SME</p>
+                    </div>
+                    <div class="glass rounded-2xl p-6">
+                        <div class="text-3xl font-bold display gradient-text">24/7</div>
+                        <div class="font-medium mt-1 mb-2">ลูกค้าต้องการทันที</div>
+                        <p class="text-sm text-zinc-400">Gen Z/Alpha คาดหวังคำตอบ < 5 วินาที ในทุกช่องทาง</p>
+                    </div>
+                    <div class="glass rounded-2xl p-6">
+                        <div class="text-3xl font-bold display gradient-text">3x</div>
+                        <div class="font-medium mt-1 mb-2">ROI ชัดเจน</div>
+                        <p class="text-sm text-zinc-400">ลดต้นทุนพนักงาน 60% เพิ่ม conversion 35% ใน 90 วัน</p>
+                    </div>
+                    <div class="glass rounded-2xl p-6">
+                        <div class="text-3xl font-bold display gradient-text">กฎหมาย</div>
+                        <div class="font-medium mt-1 mb-2">รองรับแล้ว</div>
+                        <p class="text-sm text-zinc-400">EU AI Act, PDPA, Thai AI Governance เปิดทางให้ Agent ทำงานจริง</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- REGIONAL SHARES -->
+    <section class="relative py-24 border-y border-white/5">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-12">
+                <div>
+                    <h2 class="display text-4xl font-bold mb-3">ส่วนแบ่งตามภูมิภาค</h2>
+                    <p class="text-zinc-400">Regional Market Share 2030 — SAM $47.82B</p>
+                </div>
+                <div class="text-sm text-zinc-500">หน่วย: พันล้านดอลลาร์</div>
+            </div>
+
+            <div class="grid md:grid-cols-4 gap-5">
+                <div class="group relative overflow-hidden glass-strong rounded-3xl p-7 hover:-translate-y-1 transition-all">
+                    <div class="absolute inset-0 bg-gradient-to-b from-[#7C3AED]/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div class="relative">
+                        <div class="flex justify-between items-start mb-6">
+                            <div>
+                                <div class="text-sm text-zinc-400">North America</div>
+                                <div class="text-2xl font-bold mt-1">42%</div>
+                            </div>
+                            <div class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">🇺🇸</div>
+                        </div>
+                        <div class="display text-4xl font-bold">$20.08B</div>
+                        <div class="mt-4 h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                            <div class="h-full w-[42%] bg-gradient-to-r from-[#7C3AED] to-[#A78BFA] rounded-full"></div>
+                        </div>
+                        <p class="text-xs text-zinc-500 mt-3">ผู้นำด้าน Enterprise AI agents</p>
+                    </div>
+                </div>
+
+                <div class="group relative overflow-hidden glass-strong rounded-3xl p-7 hover:-translate-y-1 transition-all">
+                    <div class="absolute inset-0 bg-gradient-to-b from-[#EC4899]/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div class="relative">
+                        <div class="flex justify-between items-start mb-6">
+                            <div>
+                                <div class="text-sm text-zinc-400">Asia-Pacific</div>
+                                <div class="text-2xl font-bold mt-1">31%</div>
+                            </div>
+                            <div class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">🌏</div>
+                        </div>
+                        <div class="display text-4xl font-bold">$14.82B</div>
+                        <div class="mt-4 h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                            <div class="h-full w-[31%] bg-gradient-to-r from-[#EC4899] to-[#F472B6] rounded-full"></div>
+                        </div>
+                        <p class="text-xs text-zinc-500 mt-3">โตเร็วสุด CAGR 44% นำโดยไทย อินเดีย</p>
+                    </div>
+                </div>
+
+                <div class="group relative overflow-hidden glass-strong rounded-3xl p-7 hover:-translate-y-1 transition-all">
+                    <div class="relative">
+                        <div class="flex justify-between items-start mb-6">
+                            <div>
+                                <div class="text-sm text-zinc-400">Europe</div>
+                                <div class="text-2xl font-bold mt-1">19%</div>
+                            </div>
+                            <div class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">🇪🇺</div>
+                        </div>
+                        <div class="display text-4xl font-bold">$9.09B</div>
+                        <div class="mt-4 h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                            <div class="h-full w-[19%] bg-gradient-to-r from-violet-700 to-purple-500 rounded-full"></div>
+                        </div>
+                        <p class="text-xs text-zinc-500 mt-3">เน้น compliance & privacy-first</p>
+                    </div>
+                </div>
+
+                <div class="group relative overflow-hidden glass-strong rounded-3xl p-7 hover:-translate-y-1 transition-all">
+                    <div class="relative">
+                        <div class="flex justify-between items-start mb-6">
+                            <div>
+                                <div class="text-sm text-zinc-400">Rest of World</div>
+                                <div class="text-2xl font-bold mt-1">8%</div>
+                            </div>
+                            <div class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">🌍</div>
+                        </div>
+                        <div class="display text-4xl font-bold">$3.83B</div>
+                        <div class="mt-4 h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                            <div class="h-full w-[8%] bg-zinc-600 rounded-full"></div>
+                        </div>
+                        <p class="text-xs text-zinc-500 mt-3">LATAM + MENA กำลังเร่ง</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- EVOLUTION -->
+    <section class="relative py-24">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="text-center max-w-2xl mx-auto mb-16">
+                <h2 class="display text-4xl md:text-5xl font-bold mb-4">วิวัฒนาการ 2026–2034</h2>
+                <p class="text-zinc-400">จาก Chatbot สู่ Chief Experience Officer ที่เป็น AI</p>
+            </div>
+
+            <div class="relative">
+                <!-- timeline line -->
+                <div class="hidden md:block absolute top-24 left-0 right-0 h-0.5 bg-gradient-to-r from-[#4C1D95] via-[#7C3AED] to-[#EC4899] opacity-40"></div>
+                
+                <div class="grid md:grid-cols-4 gap-8 relative">
+                    <div class="relative">
+                        <div class="hidden md:flex absolute -top-1 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-[#7C3AED] ring-4 ring-[#7C3AED]/20 z-10"></div>
+                        <div class="glass rounded-3xl p-6 mt-8 md:mt-16 hover:bg-white/10 transition-all">
+                            <div class="inline-flex px-2.5 py-1 rounded-lg bg-[#7C3AED]/20 text-[#A78BFA] text-xs font-medium mb-3">2026–2027</div>
+                            <h4 class="font-semibold text-lg mb-2">Copilot Era</h4>
+                            <p class="text-sm text-zinc-400">AI ช่วยตอบ 80% พนักงานตรวจ 20% ต้นทุนลด 40%</p>
+                            <div class="mt-4 text-xs text-zinc-500">SAM: $12–18B</div>
+                        </div>
+                    </div>
+                    
+                    <div class="relative">
+                        <div class="hidden md:flex absolute -top-1 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-[#9333EA] ring-4 ring-[#9333EA]/20 z-10"></div>
+                        <div class="glass rounded-3xl p-6 mt-8 md:mt-16 hover:bg-white/10 transition-all">
+                            <div class="inline-flex px-2.5 py-1 rounded-lg bg-violet-500/20 text-violet-300 text-xs font-medium mb-3">2028–2029</div>
+                            <h4 class="font-semibold text-lg mb-2">Autonomous Agents</h4>
+                            <p class="text-sm text-zinc-400">Agent ปิดการขาย คืนเงิน จองนัด เองได้ ไม่ต้องคน</p>
+                            <div class="mt-4 text-xs text-zinc-500">SAM: $24–35B</div>
+                        </div>
+                    </div>
+
+                    <div class="relative">
+                        <div class="hidden md:flex absolute -top-1 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-[#C026D3] ring-4 ring-[#C026D3]/20 z-10"></div>
+                        <div class="glass rounded-3xl p-6 mt-8 md:mt-16 hover:bg-white/10 transition-all">
+                            <div class="inline-flex px-2.5 py-1 rounded-lg bg-fuchsia-500/20 text-fuchsia-300 text-xs font-medium mb-3">2030–2031</div>
+                            <h4 class="font-semibold text-lg mb-2">Predictive CX</h4>
+                            <p class="text-sm text-zinc-400">AI ทำนายปัญหาก่อนเกิด โทรหาลูกค้าก่อน complain</p>
+                            <div class="mt-4 text-xs text-zinc-500">SAM: $47–62B</div>
+                        </div>
+                    </div>
+
+                    <div class="relative">
+                        <div class="hidden md:flex absolute -top-1 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-[#EC4899] ring-4 ring-[#EC4899]/30 z-10"></div>
+                        <div class="glass rounded-3xl p-6 mt-8 md:mt-16 hover:bg-white/10 transition-all ring-1 ring-pink-500/20">
+                            <div class="inline-flex px-2.5 py-1 rounded-lg bg-[#EC4899]/20 text-pink-300 text-xs font-medium mb-3">2032–2034</div>
+                            <h4 class="font-semibold text-lg mb-2">Emotional AI CXO</h4>
+                            <p class="text-sm text-zinc-400">AI เข้าใจอารมณ์ สร้างแบรนด์เลิฟเวอร์แทนมนุษย์ CMO</p>
+                            <div class="mt-4 text-xs text-zinc-500">SAM: $78–117.87B</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="relative py-20">
+        <div class="max-w-5xl mx-auto px-6">
+            <div class="relative overflow-hidden glass-strong rounded-[2rem] p-10 md:p-14 text-center">
+                <div class="absolute -top-20 -right-20 w-64 h-64 bg-[#EC4899] rounded-full blur-[100px] opacity-20"></div>
+                <div class="absolute -bottom-20 -left-20 w-64 h-64 bg-[#7C3AED] rounded-full blur-[100px] opacity-20"></div>
+                
+                <h3 class="display text-3xl md:text-4xl font-bold mb-4">พร้อมเข้าสู่ยุค $117B หรือยัง?</h3>
+                <p class="text-zinc-300 max-w-2xl mx-auto mb-8">เข้าถึงรายงานฉบับเต็ม 42 หน้า พร้อมโมเดลรายได้, case study, และ playbook สำหรับไทย</p>
+                
+                <div class="flex flex-col sm:flex-row gap-3 justify-center">
+                    <a href="#" class="px-7 py-3.5 rounded-2xl font-medium bg-white text-black hover:bg-zinc-200 transition">ดาวน์โหลดรายงานภาษาไทย</a>
+                    <a href="https://notebooklm.google.com/notebook/f95b23ae-90ea-41da-b62b-fac4398b11ff?utm_source=nlmm_share" target="_blank" rel="noopener" class="px-7 py-3.5 rounded-2xl font-medium glass hover:bg-white/10 transition border border-white/20">เปิด NotebookLM</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="relative border-t border-white/10 py-10">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-[#7C3AED] to-[#EC4899] flex items-center justify-center font-bold text-sm">AI</div>
+                    <div>
+                        <div class="text-sm font-medium">AI CX Labs</div>
+                        <div class="text-xs text-zinc-500">Market Intelligence 2026</div>
+                    </div>
+                </div>
+                
+                <div class="flex items-center gap-6 text-sm">
+                    <a href="https://notebooklm.google.com/notebook/f95b23ae-90ea-41da-b62b-fac4398b11ff?utm_source=nlmm_share" target="_blank" rel="noopener" class="text-zinc-400 hover:text-white transition flex items-center gap-1.5">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                        แหล่งข้อมูลเต็ม
+                    </a>
+                    <span class="text-zinc-600">|</span>
+                    <span class="text-zinc-500">จัดทำโดย Maew Maew Ooh | Created by Maew Maew Ooh © 2026</span>
+                </div>
+            </div>
+        </div>
+    </footer>
+<script>(function(){document.addEventListener("click",function(e){var a=e.target.closest("[data-product-id]");if(!a)return;e.preventDefault();var pid=a.getAttribute("data-product-id");if(pid)parent.postMessage({type:"ecto-artifact-link-click",productId:pid},"*")})})();</script>
 </body>
 </html>
