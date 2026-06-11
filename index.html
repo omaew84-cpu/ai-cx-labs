@@ -1,673 +1,595 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-<!-- Playables SDK -->
-<script>// Playables SDK v1.0.0
-// Game lifecycle bridge: rAF-based game-ready detection + event communication
-(function() {
-  'use strict';
-
-  // Idempotency: skip if already initialized (e.g., server-side injection
-  // followed by client-side inject-javascript via the Bloks webview component).
-  if (window.playablesSDK) return;
-
-  var HANDLER_NAME = 'playablesGameEventHandler';
-  var ANDROID_BRIDGE_NAME = '_MetaPlayablesBridge';
-  var RAF_FRAME_THRESHOLD = 3;
-
-  var gameReadySent = false;
-  var firstInteractionSent = false;
-  var errorSent = false;
-  var frameCount = 0;
-  var originalRAF = window.requestAnimationFrame;
-
-  // --- Transport Layer ---
-
-  function hasIOSBridge() {
-    return !!(window.webkit &&
-              window.webkit.messageHandlers &&
-              window.webkit.messageHandlers[HANDLER_NAME]);
-  }
-
-  function hasAndroidBridge() {
-    return !!(window[ANDROID_BRIDGE_NAME] &&
-              typeof window[ANDROID_BRIDGE_NAME].postEvent === 'function');
-  }
-
-  function isInIframe() {
-    return !!(window.parent && window.parent !== window);
-  }
-
-  function sendEvent(eventName, payload) {
-    var message = {
-      type: eventName,
-      payload: payload || {},
-      timestamp: Date.now()
-    };
-
-    if (hasIOSBridge()) {
-      try {
-        window.webkit.messageHandlers[HANDLER_NAME].postMessage(message);
-      } catch (e) { /* ignore */ }
-      return;
-    }
-
-    if (hasAndroidBridge()) {
-    try {
-      var p = payload || {};
-      p.__secureToken = window.__fbAndroidBridgeAuthToken || '';
-      p.timestamp = message.timestamp;
-      window[ANDROID_BRIDGE_NAME].postEvent(
-        eventName,
-        JSON.stringify(p)
-      );
-    } catch (e) { /* ignore */ }
-    return;
-  }
-
-    if (isInIframe()) {
-      try {
-        window.parent.postMessage(message, '*');
-      } catch (e) { /* ignore */ }
-      return;
-    }
-  }
-
-  // --- rAF Game-Ready Detection ---
-
-  function onFrame() {
-    if (gameReadySent) return;
-
-    frameCount++;
-    if (frameCount >= RAF_FRAME_THRESHOLD) {
-      gameReadySent = true;
-      sendEvent('game_ready', {
-        frame_count: frameCount,
-        detected_at: Date.now()
-      });
-      return;
-    }
-
-    originalRAF.call(window, onFrame);
-  }
-
-  if (originalRAF) {
-    window.requestAnimationFrame = function(callback) {
-      if (!gameReadySent) {
-        return originalRAF.call(window, function(timestamp) {
-          frameCount++;
-          if (frameCount >= RAF_FRAME_THRESHOLD && !gameReadySent) {
-            gameReadySent = true;
-            sendEvent('game_ready', {
-              frame_count: frameCount,
-              detected_at: Date.now()
-            });
-          }
-          callback(timestamp);
-        });
-      }
-      return originalRAF.call(window, callback);
-    };
-  }
-
-  // --- First User Interaction Detection ---
-
-  function setupFirstInteractionDetection() {
-    var events = ['touchstart', 'mousedown', 'keydown'];
-
-    function onFirstInteraction() {
-      if (firstInteractionSent) return;
-      firstInteractionSent = true;
-      sendEvent('user_interaction_start', null);
-
-      for (var i = 0; i < events.length; i++) {
-        document.removeEventListener(events[i], onFirstInteraction, true);
-      }
-    }
-
-    for (var i = 0; i < events.length; i++) {
-      document.addEventListener(events[i], onFirstInteraction, true);
-    }
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', setupFirstInteractionDetection);
-  } else {
-    setupFirstInteractionDetection();
-  }
-
-  // --- Auto Error Capture ---
-
-  window.addEventListener('error', function(event) {
-    if (errorSent) return;
-    errorSent = true;
-    sendEvent('error', {
-      message: event.message || 'Unknown error',
-      source: event.filename || '',
-      lineno: event.lineno || 0,
-      colno: event.colno || 0,
-      auto_captured: true
-    });
-  });
-
-  window.addEventListener('unhandledrejection', function(event) {
-    if (errorSent) return;
-    errorSent = true;
-    var reason = event.reason;
-    sendEvent('error', {
-      message: (reason instanceof Error) ? reason.message : String(reason),
-      type: 'unhandled_promise_rejection',
-      auto_captured: true
-    });
-  });
-
-  // --- Public API ---
-
-  window.playablesSDK = {
-    complete: function(score) {
-      sendEvent('game_ended', {
-        score: score,
-        completed: true
-      });
-    },
-
-    error: function(message) {
-      if (errorSent) return;
-      errorSent = true;
-      sendEvent('error', {
-        message: message || 'Unknown error',
-        auto_captured: false
-      });
-    },
-
-    sendEvent: function(eventName, payload) {
-      if (!eventName || typeof eventName !== 'string') return;
-      sendEvent(eventName, payload);
-    }
-  };
-
-  // Kick off rAF detection in case no game code calls rAF immediately
-  if (originalRAF) {
-    originalRAF.call(window, onFrame);
-  }
-})();</script>
-<!-- PLAYABLE_TOUCH_PATCH_V1 --><script>
-(function() {
-  if (window.__playableTouchPatchInstalled) return;
-  window.__playableTouchPatchInstalled = true;
-  var origAdd = EventTarget.prototype.addEventListener;
-  var blockedTypes = { touchstart: 1, touchmove: 1, wheel: 1 };
-  EventTarget.prototype.addEventListener = function(type, listener, options) {
-    if (blockedTypes[type]) {
-      if (options === undefined || options === null) {
-        options = { passive: true };
-      } else if (typeof options === 'boolean') {
-        options = { capture: options, passive: true };
-      } else {
-        options = Object.assign({}, options, { passive: true });
-      }
-    }
-    return origAdd.call(this, type, listener, options);
-  };
-})();
-</script><script>window.Intl=window.Intl||{};Intl.t=function(s){return(Intl._locale&&Intl._locale[s])||s;};</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI CX Labs — จาก Chatbot สู่ Agentic AI</title>
+<title>AI CX Labs - จาก Chatbot สู่ Agentic AI</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600&family=Cormorant+Garamond:wght@500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
-    :root {
-        --purple-900: #2e1065;
-        --purple-800: #3c096c;
-        --purple-700: #4c1d95;
-        --purple-500: #7c3aed;
-        --purple-300: #a78bfa;
-        --purple-200: #c4b5fd;
-        --gold-dark: #d4af37;
-        --gold: #facc15;
-        --gold-light: #fde68a;
-        --bg-top: #1e1b4b;
-        --bg-mid: #0f0a1f;
-        --bg-deep: #070410;
-        --text-main: #f5f3ff;
-        --text-soft: #d6ccfa;
-        --text-dim: #b1a3e5;
-        --surface: rgba(60,9,108,0.22);
-        --surface-strong: rgba(22,12,44,0.72);
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html { scroll-behavior: smooth; }
-    body {
-        font-family: 'Noto Sans Thai', 'Sukhumvit Set', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        background-color: var(--bg-deep);
-        background-image: radial-gradient(1200px 800px at 50% -10%, var(--bg-top) 0%, var(--bg-mid) 45%, var(--bg-deep) 100%);
-        color: var(--text-main);
-        min-height: 100vh;
-        overflow-x: hidden;
-        -webkit-font-smoothing: antialiased;
-    }
-    .container { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
-    
-    /* Luxury orbs */
-    .orb {
-        position: absolute;
-        border-radius: 50%;
-        filter: blur(90px);
-        z-index: 0;
-        opacity: 0.55;
-        pointer-events: none;
-    }
-    .orb1 {
-        width: 520px; height: 520px;
-        background: radial-gradient(circle, rgba(76,29,149,0.5) 0%, rgba(60,9,108,0.32) 40%, transparent 70%);
-        top: -160px; left: -180px;
-    }
-    .orb2 {
-        width: 420px; height: 420px;
-        background: radial-gradient(circle, rgba(212,175,55,0.28) 0%, rgba(250,204,21,0.18) 40%, transparent 70%);
-        top: 8%; right: -160px;
-    }
-    .orb3 {
-        width: 320px; height: 320px;
-        background: radial-gradient(circle, rgba(124,58,237,0.22) 0%, transparent 70%);
-        bottom: 18%; left: 8%;
-        filter: blur(110px);
-    }
+:root {
+  --bg: #1e1b4b;
+  --bg-dark: #0f0c2e;
+  --accent: #4c1d95;
+  --accent-light: #6d28d9;
+  --gold: #d4af37;
+  --gold-light: #f4e4a6;
+  --text: #f5f3ff;
+  --text-dim: rgba(245,243,255,0.7);
+}
 
-    nav {
-        position: relative;
-        z-index: 10;
-        padding: 28px 0;
-        display: flex;
-        justify-content: center;
-    }
-    .nav-inner {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 10px 22px;
-        background: rgba(12,8,26,0.6);
-        backdrop-filter: blur(14px);
-        border: 1px solid rgba(212,175,55,0.18);
-        border-radius: 100px;
-        box-shadow: 0 4px 24px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04);
-    }
-    .logo-dot {
-        width: 8px; height: 8px; border-radius: 50%;
-        background: linear-gradient(135deg, var(--purple-700), var(--gold));
-        box-shadow: 0 0 12px rgba(250,204,21,0.4);
-    }
-    .logo-text {
-        font-family: 'Cormorant Garamond', serif;
-        font-weight: 600;
-        font-size: 18px;
-        letter-spacing: 0.5px;
-        background: linear-gradient(90deg, var(--purple-200), var(--gold-light));
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-    }
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
 
-    /* Hero */
-    .hero {
-        position: relative;
-        text-align: center;
-        padding: 110px 0 84px;
-        z-index: 2;
-    }
-    .hero-content { position: relative; z-index: 3; }
-    .lux-line {
-        width: 140px; height: 1px;
-        margin: 0 auto 32px;
-        background: linear-gradient(90deg, transparent, var(--gold-dark), transparent);
-        opacity: 0.8;
-    }
-    h1 {
-        font-family: 'Cormorant Garamond', serif;
-        font-size: clamp(48px, 11vw, 120px);
-        line-height: 0.9;
-        font-weight: 600;
-        letter-spacing: -0.02em;
-        margin-bottom: 24px;
-        background: linear-gradient(100deg, #e9ddff 0%, #c4b5fd 18%, #a78bfa 36%, #d4af37 68%, #facc15 92%);
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-        animation: shimmer 9s ease-in-out infinite;
-        background-size: 200% auto;
-        filter: drop-shadow(0 12px 40px rgba(60,9,108,0.5));
-    }
-    @keyframes shimmer {
-        0%, 100% { background-position: 0% center; }
-        50% { background-position: 100% center; }
-    }
-    .subtitle {
-        font-size: clamp(20px, 2.8vw, 28px);
-        font-weight: 400;
-        color: var(--purple-200);
-        margin-bottom: 20px;
-        letter-spacing: 0.3px;
-    }
-    .tagline {
-        font-size: clamp(16px, 1.8vw, 19px);
-        color: var(--text-dim);
-        font-weight: 300;
-        max-width: 700px;
-        margin: 0 auto 42px;
-        line-height: 1.9;
-    }
-    .cta-wrap { margin-top: 14px; }
-    .cta {
-        display: inline-flex;
-        align-items: center;
-        gap: 9px;
-        padding: 14px 34px;
-        border-radius: 100px;
-        text-decoration: none;
-        font-weight: 500;
-        font-size: 16px;
-        color: var(--text-main);
-        background: linear-gradient(var(--surface-strong), var(--surface-strong)) padding-box, 
-                    linear-gradient(90deg, var(--purple-700), var(--gold-dark)) border-box;
-        border: 1.5px solid transparent;
-        box-shadow: 0 8px 28px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06);
-        transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
-    }
-    .cta:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 14px 36px rgba(0,0,0,0.65), 0 0 24px rgba(212,175,55,0.18), inset 0 1px 0 rgba(255,255,255,0.08);
-        background: linear-gradient(rgba(35,20,70,0.85), rgba(35,20,70,0.85)) padding-box,
-                    linear-gradient(90deg, var(--purple-700), var(--gold)) border-box;
-    }
-    .cta svg { transition: transform 0.3s; }
-    .cta:hover svg { transform: translateX(3px); }
+html {
+  scroll-behavior: smooth;
+}
 
-    /* Concepts */
-    .section {
-        padding: 84px 0;
-        position: relative;
-        z-index: 2;
-    }
-    .section-title {
-        text-align: center;
-        font-size: clamp(26px, 3vw, 34px);
-        font-weight: 500;
-        color: var(--text-main);
-        margin-bottom: 12px;
-        letter-spacing: 0.2px;
-    }
-    .section-sub {
-        text-align: center;
-        color: var(--text-dim);
-        font-weight: 300;
-        margin-bottom: 48px;
-        font-size: 16px;
-    }
-    .cards {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 26px;
-        max-width: 1040px;
-        margin: 0 auto;
-    }
-    .card {
-        position: relative;
-        background: linear-gradient(180deg, rgba(46,16,101,0.28), rgba(15,10,31,0.5));
-        backdrop-filter: blur(18px);
-        border: 1px solid rgba(167,139,250,0.14);
-        border-radius: 26px;
-        padding: 38px 28px;
-        text-align: center;
-        box-shadow: 0 12px 36px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.03);
-        transition: all 0.45s ease;
-        overflow: hidden;
-    }
-    .card::before {
-        content: '';
-        position: absolute;
-        top: 0; left: 0; right: 0;
-        height: 1px;
-        background: linear-gradient(90deg, transparent, var(--gold), transparent);
-        opacity: 0.7;
-    }
-    .card::after {
-        content: '';
-        position: absolute;
-        inset: -1px;
-        background: radial-gradient(400px 200px at 50% -20%, rgba(250,204,21,0.12), transparent 60%);
-        opacity: 0;
-        transition: opacity 0.4s;
-        pointer-events: none;
-    }
-    .card:hover {
-        transform: translateY(-8px);
-        box-shadow: 0 24px 50px rgba(0,0,0,0.65), 0 0 40px rgba(76,29,149,0.25);
-        border-color: rgba(212,175,55,0.38);
-    }
-    .card:hover::after { opacity: 1; }
-    .icon-wrap {
-        width: 66px; height: 66px;
-        margin: 0 auto 22px;
-        display: grid; place-items: center;
-        border-radius: 18px;
-        background: linear-gradient(135deg, rgba(76,29,149,0.38), rgba(212,175,55,0.14));
-        border: 1px solid rgba(212,175,55,0.24);
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 8px 20px rgba(0,0,0,0.4);
-    }
-    .icon-wrap svg {
-        width: 28px; height: 28px;
-        stroke: url(#purpleGold);
-        stroke-width: 1.5;
-        fill: none;
-    }
-    .card h4 {
-        font-size: 21px;
-        font-weight: 500;
-        color: var(--text-main);
-        margin-bottom: 10px;
-    }
-    .card p {
-        font-size: 15px;
-        line-height: 1.8;
-        color: var(--text-soft);
-        font-weight: 300;
-    }
+body {
+  font-family: 'Prompt', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.8;
+  overflow-x: hidden;
+  position: relative;
+}
 
-    /* Gallery */
-    .gallery {
-        padding-top: 40px;
-    }
-    .grid {
-        display: grid;
-        grid-template-columns: repeat(12, 1fr);
-        gap: 22px;
-        margin-top: 44px;
-    }
-    .item {
-        position: relative;
-        border-radius: 18px;
-        overflow: hidden;
-        background: #140c27;
-        box-shadow: 0 10px 28px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.35);
-        transition: all 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
-        cursor: pointer;
-        isolation: isolate;
-        border: 1px solid rgba(76,29,149,0.35);
-    }
-    .item::after {
-        content: '';
-        position: absolute;
-        inset: 0;
-        border-radius: 18px;
-        padding: 1px;
-        background: linear-gradient(135deg, rgba(124,58,237,0.5), rgba(212,175,55,0.5));
-        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-        -webkit-mask-composite: xor;
-        mask-composite: exclude;
-        opacity: 0;
-        transition: opacity 0.4s;
-    }
-    .item:hover {
-        transform: translateY(-8px);
-        box-shadow: 0 24px 48px rgba(0,0,0,0.7), 0 8px 20px rgba(212,175,55,0.16);
-        border-color: rgba(212,175,55,0.5);
-    }
-    .item:hover::after { opacity: 1; }
-    .item img {
-        width: 100%;
-        height: 100%;
-        display: block;
-        object-fit: cover;
-        transition: transform 0.7s ease, filter 0.5s ease;
-        filter: saturate(1.05) contrast(1.02);
-    }
-    .item:hover img { transform: scale(1.05); filter: saturate(1.15) contrast(1.05); }
-    
-    /* layout masonry-like */
-    .item:nth-child(1) { grid-column: span 5; aspect-ratio: 4/3; }
-    .item:nth-child(2) { grid-column: span 7; aspect-ratio: 16/9; }
-    .item:nth-child(3) { grid-column: span 7; aspect-ratio: 16/9; }
-    .item:nth-child(4) { grid-column: span 5; aspect-ratio: 4/3; }
-    .item:nth-child(5) { grid-column: span 4; aspect-ratio: 1/1; }
-    .item:nth-child(6) { grid-column: span 4; aspect-ratio: 1/1; }
-    .item:nth-child(7) { grid-column: span 4; aspect-ratio: 1/1; }
-    .item:nth-child(8) { grid-column: span 6; aspect-ratio: 4/3; }
-    .item:nth-child(9) { grid-column: span 6; aspect-ratio: 16/10; }
-    .item:nth-child(10) { grid-column: span 12; aspect-ratio: 21/9; }
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: 
+    radial-gradient(circle at 20% 30%, rgba(76,29,149,0.4) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(212,175,55,0.15) 0%, transparent 40%),
+    radial-gradient(circle at 50% 80%, rgba(76,29,149,0.3) 0%, transparent 50%);
+  z-index: -2;
+}
 
-    /* Footer */
-    footer {
-        margin-top: 110px;
-        padding: 44px 0 70px;
-        text-align: center;
-        position: relative;
-    }
-    footer::before {
-        content: '';
-        position: absolute;
-        top: 0; left: 50%;
-        transform: translateX(-50%);
-        width: 240px; height: 1px;
-        background: linear-gradient(90deg, transparent, rgba(167,139,250,0.4), rgba(212,175,55,0.5), transparent);
-    }
-    .footer-text {
-        font-size: 14px;
-        color: var(--text-dim);
-        font-weight: 300;
-        letter-spacing: 0.4px;
-    }
-    .footer-text span {
-        background: linear-gradient(90deg, var(--purple-200), var(--gold));
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-        font-weight: 500;
-    }
+body::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    linear-gradient(rgba(212,175,55,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(212,175,55,0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+  z-index: -1;
+}
 
-    /* Mobile */
-    @media (max-width: 900px) {
-        .cards { grid-template-columns: 1fr; max-width: 520px; }
-        .grid { grid-template-columns: 1fr; }
-        .item:nth-child(n) { grid-column: span 1; aspect-ratio: 16/10; }
-        .hero { padding: 80px 0 64px; }
-        .section { padding: 64px 0; }
-        .orb1, .orb2, .orb3 { opacity: 0.35; filter: blur(70px); }
-    }
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+/* Hero */
+.hero {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+  padding: 2rem 1.5rem;
+}
+
+.hero-content {
+  position: relative;
+  z-index: 2;
+  animation: fadeInUp 1s ease-out;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1.25rem;
+  background: rgba(76,29,149,0.3);
+  border: 1px solid rgba(212,175,55,0.3);
+  border-radius: 100px;
+  font-size: 0.875rem;
+  color: var(--gold-light);
+  margin-bottom: 2rem;
+  backdrop-filter: blur(10px);
+}
+
+.hero-badge::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  background: var(--gold);
+  border-radius: 50%;
+  box-shadow: 0 0 10px var(--gold);
+  animation: pulse 2s infinite;
+}
+
+.hero h1 {
+  font-size: clamp(3rem, 10vw, 6.5rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 1rem;
+  background: linear-gradient(135deg, #ffffff 0%, var(--gold-light) 40%, var(--gold) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 40px rgba(212,175,55,0.3));
+}
+
+.hero-subtitle {
+  font-size: clamp(1.25rem, 3.5vw, 2.25rem);
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 1.5rem;
+}
+
+.hero-desc {
+  font-size: clamp(1rem, 2vw, 1.125rem);
+  color: var(--text-dim);
+  max-width: 680px;
+  margin: 0 auto 3rem;
+  font-weight: 300;
+}
+
+.hero-line {
+  width: 120px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  margin: 2.5rem auto;
+  box-shadow: 0 0 20px rgba(212,175,55,0.5);
+}
+
+.cta-group {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.btn {
+  padding: 1rem 2.25rem;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: 'Prompt', sans-serif;
+  cursor: pointer;
+  border: none;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--gold), #b8941f);
+  color: var(--bg-dark);
+  box-shadow: 0 10px 30px rgba(212,175,55,0.3), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 15px 40px rgba(212,175,55,0.4), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+
+.btn-secondary {
+  background: rgba(76,29,149,0.3);
+  color: var(--text);
+  border: 1px solid rgba(212,175,55,0.3);
+  backdrop-filter: blur(10px);
+}
+
+.btn-secondary:hover {
+  background: rgba(76,29,149,0.5);
+  border-color: var(--gold);
+  transform: translateY(-2px);
+}
+
+/* Orbs */
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.5;
+  z-index: 1;
+  animation: float 20s infinite ease-in-out;
+}
+
+.orb-1 {
+  width: 300px;
+  height: 300px;
+  background: var(--accent);
+  top: 10%;
+  left: 10%;
+}
+
+.orb-2 {
+  width: 400px;
+  height: 400px;
+  background: var(--gold);
+  bottom: 10%;
+  right: 10%;
+  animation-delay: -10s;
+}
+
+/* Principles */
+.principles {
+  padding: 6rem 0;
+  position: relative;
+}
+
+.section-header {
+  text-align: center;
+  margin-bottom: 4rem;
+}
+
+.section-tag {
+  display: inline-block;
+  color: var(--gold);
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 1rem;
+}
+
+.section-title {
+  font-size: clamp(2rem, 5vw, 3rem);
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.section-desc {
+  color: var(--text-dim);
+  max-width: 600px;
+  margin: 0 auto;
+  font-weight: 300;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  margin-top: 3rem;
+}
+
+.card {
+  position: relative;
+  padding: 2.5rem;
+  background: linear-gradient(145deg, rgba(76,29,149,0.4), rgba(30,27,75,0.6));
+  border: 1px solid rgba(212,175,55,0.15);
+  border-radius: 24px;
+  backdrop-filter: blur(20px);
+  transition: all 0.4s ease;
+  overflow: hidden;
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.card:hover {
+  transform: translateY(-8px);
+  border-color: rgba(212,175,55,0.4);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.4), 0 0 40px rgba(212,175,55,0.15);
+}
+
+.card:hover::before {
+  opacity: 1;
+}
+
+.card-icon {
+  width: 64px;
+  height: 64px;
+  background: linear-gradient(135deg, rgba(212,175,55,0.2), rgba(212,175,55,0.05));
+  border: 1px solid rgba(212,175,55,0.3);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+  font-size: 1.75rem;
+}
+
+.card h3 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: var(--gold-light);
+  margin-bottom: 1rem;
+}
+
+.card p {
+  color: var(--text-dim);
+  font-weight: 300;
+  line-height: 1.8;
+}
+
+/* Gallery */
+.gallery-section {
+  padding: 6rem 0;
+  background: linear-gradient(to bottom, transparent, rgba(15,12,46,0.5), transparent);
+}
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-top: 3rem;
+}
+
+.gallery-item {
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+  background: rgba(76,29,149,0.2);
+  border: 1px solid rgba(212,175,55,0.15);
+  aspect-ratio: 16/10;
+  transition: all 0.4s ease;
+}
+
+.gallery-item:hover {
+  transform: translateY(-4px);
+  border-color: rgba(212,175,55,0.4);
+  box-shadow: 0 15px 40px rgba(0,0,0,0.5);
+}
+
+.gallery-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 16px;
+  display: block;
+  transition: transform 0.6s ease;
+}
+
+.gallery-item:hover img {
+  transform: scale(1.05);
+}
+
+/* Make all gallery images responsive */
+img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 16px;
+}
+
+/* Footer */
+footer {
+  padding: 3rem 1.5rem 2rem;
+  text-align: center;
+  border-top: 1px solid rgba(212,175,55,0.15);
+  background: rgba(15,12,46,0.7);
+  backdrop-filter: blur(10px);
+}
+
+.footer-content {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.footer-logo {
+  font-size: 1.5rem;
+  font-weight: 600;
+  background: linear-gradient(135deg, #fff, var(--gold));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 1rem;
+}
+
+.footer-text {
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  font-weight: 300;
+}
+
+/* Animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.9); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  33% { transform: translate(30px, -30px) rotate(5deg); }
+  66% { transform: translate(-20px, 20px) rotate(-5deg); }
+}
+
+/* Reveal on scroll */
+.reveal {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: all 0.8s ease;
+}
+
+.reveal.active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .hero {
+    min-height: 90vh;
+  }
+  
+  .cards {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  
+  .card {
+    padding: 2rem;
+  }
+  
+  .gallery {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .cta-group {
+    flex-direction: column;
+    align-items: stretch;
+    max-width: 300px;
+    margin: 0 auto;
+  }
+  
+  .principles, .gallery-section {
+    padding: 4rem 0;
+  }
+}
 </style>
 </head>
 <body>
-    <svg width="0" height="0" style="position:absolute">
-        <defs>
-            <linearGradient id="purpleGold" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" style="stop-color:#c4b5fd"/>
-                <stop offset="100%" style="stop-color:#d4af37"/>
-            </linearGradient>
-        </defs>
-    </svg>
+  <!-- Hero -->
+  <section class="hero">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    
+    <div class="hero-content container">
+      <div class="hero-badge">Next-Generation Customer Experience</div>
+      <h1>AI CX Labs</h1>
+      <p class="hero-subtitle">จาก Chatbot สู่ Agentic AI</p>
+      <div class="hero-line"></div>
+      <p class="hero-desc">
+        เรายกระดับประสบการณ์ลูกค้าด้วย AI อัจฉริยะที่คิด วางแผน และลงมือทำได้ด้วยตัวเอง 
+        เปลี่ยนทุกปฏิสัมพันธ์ให้เป็นความสัมพันธ์ที่ยั่งยืน
+      </p>
+      <div class="cta-group">
+        <a href="#principles" class="btn btn-primary">
+          สำรวจหลักการของเรา
+          <span>→</span>
+        </a>
+        <a href="#gallery" class="btn btn-secondary">ชมผลงาน</a>
+      </div>
+    </div>
+  </section>
 
-    <div class="orb orb1"></div>
-    <div class="orb orb2"></div>
-    <div class="orb orb3"></div>
-
-    <nav>
-        <div class="nav-inner">
-            <div class="logo-dot"></div>
-            <div class="logo-text">AI CX Labs</div>
+  <!-- Principles -->
+  <section id="principles" class="principles">
+    <div class="container">
+      <div class="section-header reveal">
+        <div class="section-tag">หลักการสำคัญ</div>
+        <h2 class="section-title">สามเสาหลักของ Agentic CX</h2>
+        <p class="section-desc">เราไม่สร้างแค่บอทตอบคำถาม แต่สร้างตัวแทนอัจฉริยะที่เข้าใจธุรกิจของคุณ</p>
+      </div>
+      
+      <div class="cards">
+        <div class="card reveal">
+          <div class="card-icon">🧠</div>
+          <h3>เข้าใจ</h3>
+          <p>AI ของเราเข้าใจบริบท อารมณ์ และเจตนาที่ซ่อนอยู่ในทุกบทสนทนา ไม่ใช่แค่คำสำคัญ แต่เข้าใจความหมายที่แท้จริงของลูกค้าในภาษาไทยอย่างลึกซึ้ง พร้อมเรียนรู้จากทุกปฏิสัมพันธ์</p>
         </div>
-    </nav>
-
-    <main class="container">
-        <section class="hero">
-            <div class="hero-content">
-                <div class="lux-line"></div>
-                <h1>AI CX Labs</h1>
-                <p class="subtitle">จาก Chatbot สู่ Agentic AI</p>
-                <p class="tagline">ปฏิวัติประสบการณ์ลูกค้า ด้วยปัญญาประดิษฐ์ที่หรูหรา ลึกซึ้ง และเข้าใจอย่างแท้จริง — เปลี่ยนทุกบทสนทนาให้เป็นความสัมพันธ์ที่มั่งคั่งด้วยสีม่วงราชันย์</p>
-                <div class="cta-wrap">
-                    <a href="#gallery" class="cta">
-                        สำรวจวิสัยทัศน์
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-                            <path d="M6 12l4-4-4-4"/>
-                        </svg>
-                    </a>
-                </div>
-            </div>
-        </section>
-
-        <section class="section">
-            <h3 class="section-title">แนวคิดหลัก</h3>
-            <p class="section-sub">ปรัชญาการออกแบบประสบการณ์ยุคใหม่บนพื้นหลังม่วงเข้ม</p>
-            <div class="cards">
-                <div class="card">
-                    <div class="icon-wrap">
-                        <svg viewBox="0 0 24 24"><path d="M12 21a9 9 0 1 0-8.5-6M12 21v-6m0 0l-3-2m3 2l3-2M21 12a9 9 0 0 0-9-9"/></svg>
-                    </div>
-                    <h4>เข้าใจ</h4>
-                    <p>รับฟังอย่างลึกซึ้ง ด้วย AI ที่เข้าใจบริบท อารมณ์ และความต้องการที่ซ่อนอยู่</p>
-                </div>
-                <div class="card">
-                    <div class="icon-wrap">
-                        <svg viewBox="0 0 24 24"><path d="M3 12h4l3 8 4-16 3 8h4"/><circle cx="12" cy="12" r="9"/></svg>
-                    </div>
-                    <h4>คาดการณ์</h4>
-                    <p>มองเห็นความต้องการล่วงหน้า พร้อมมอบคำตอบก่อนที่ลูกค้าจะเอ่ยถาม</p>
-                </div>
-                <div class="card">
-                    <div class="icon-wrap">
-                        <svg viewBox="0 0 24 24"><path d="M12 21s-6-4.35-9-8.5C-1 7.5 3 3 8 5.5c1.5 1 2.5 4 4 1.5-1.5 2.5-3 4-4 5-2.5 9 2 5 7-3 4.15-9 8.5-9 8.5z"/></svg>
-                    </div>
-                    <h4>สร้างความผูกพัน</h4>
-                    <p>เปลี่ยนทุกปฏิสัมพันธ์ ให้เป็นความประทับใจที่ยั่งยืนและเป็นส่วนตัว</p>
-                </div>
-            </div>
-        </section>
-
-        <section id="gallery" class="section gallery">
-            <h3 class="section-title">แกลเลอรีผลงาน</h3>
-            <p class="section-sub">จากวิสัยทัศน์สู่การปฏิบัติจริง</p>
-            <div class="grid">
-                <div class="item"><img src="container:///mnt/data/slide1.png" alt="ผลงาน AI CX Labs" loading="lazy"></div>
-                <div class="item"><img src="container:///mnt/data/slide2.png" alt="ผลงาน AI CX Labs" loading="lazy"></div>
-                <div class="item"><img src="container:///mnt/data/slide3.png" alt="ผลงาน AI CX Labs" loading="lazy"></div>
-                <div class="item"><img src="container:///mnt/data/slide4.png" alt="ผลงาน AI CX Labs" loading="lazy"></div>
-                <div class="item"><img src="container:///mnt/data/slide5.png" alt="ผลงาน AI CX Labs" loading="lazy"></div>
-                <div class="item"><img src="container:///mnt/data/slide6.png" alt="ผลงาน AI CX Labs" loading="lazy"></div>
-                <div class="item"><img src="container:///mnt/data/slide7.png" alt="ผลงาน AI CX Labs" loading="lazy"></div>
-                <div class="item"><img src="container:///mnt/data/slide8.png" alt="ผลงาน AI CX Labs" loading="lazy"></div>
-                <div class="item"><img src="container:///mnt/data/market-th.jpg" alt="Market Vision Thai" loading="lazy"></div>
-                <div class="item"><img src="container:///mnt/data/market-en.jpg" alt="Market Vision English" loading="lazy"></div>
-            </div>
-        </section>
-    </main>
-
-    <footer>
-        <div class="container">
-            <p class="footer-text">© <span>AI CX Labs</span> | โทนม่วงทองหรูหรา</p>
+        
+        <div class="card reveal" style="transition-delay: 0.1s">
+          <div class="card-icon">🔮</div>
+          <h3>คาดการณ์</h3>
+          <p>Agentic AI คาดการณ์ความต้องการล่วงหน้า วางแผนการดำเนินการแบบหลายขั้นตอน และแก้ไขปัญหาเชิงรุก ก่อนที่ลูกค้าจะต้องร้องขอ เปลี่ยนจากการตั้งรับเป็นการนำหน้าเสมอ</p>
         </div>
-    </footer>
-<script>(function(){document.addEventListener("click",function(e){var a=e.target.closest("[data-product-id]");if(!a)return;e.preventDefault();var pid=a.getAttribute("data-product-id");if(pid)parent.postMessage({type:"ecto-artifact-link-click",productId:pid},"*")})})();</script>
+        
+        <div class="card reveal" style="transition-delay: 0.2s">
+          <div class="card-icon">💛</div>
+          <h3>สร้างความผูกพัน</h3>
+          <p>มอบประสบการณ์เฉพาะบุคคลที่ต่อเนื่องทุกช่องทาง จดจำทุกความชอบ สร้างบทสนทนาที่เป็นธรรมชาติ และเปลี่ยนลูกค้าขาจรให้กลายเป็นแฟนพันธุ์แท้ของแบรนด์</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Gallery -->
+  <section id="gallery" class="gallery-section">
+    <div class="container">
+      <div class="section-header reveal">
+        <div class="section-tag">ผลงาน</div>
+        <h2 class="section-title">จากวิสัยทัศน์สู่ความจริง</h2>
+        <p class="section-desc">สำรวจตัวอย่างการออกแบบประสบการณ์ลูกค้าที่ขับเคลื่อนด้วย Agentic AI</p>
+      </div>
+      
+      <div class="gallery">
+        <div class="gallery-item reveal"><img src="slide1.png" alt="ผลงาน AI CX Labs"></div>
+        <div class="gallery-item reveal"><img src="slide2.png" alt="ผลงาน AI CX Labs"></div>
+        <div class="gallery-item reveal"><img src="slide3.png" alt="ผลงาน AI CX Labs"></div>
+        <div class="gallery-item reveal"><img src="slide4.png" alt="ผลงาน AI CX Labs"></div>
+        <div class="gallery-item reveal"><img src="slide5.png" alt="ผลงาน AI CX Labs"></div>
+        <div class="gallery-item reveal"><img src="slide6.png" alt="ผลงาน AI CX Labs"></div>
+        <div class="gallery-item reveal"><img src="slide7.png" alt="ผลงาน AI CX Labs"></div>
+        <div class="gallery-item reveal"><img src="slide8.png" alt="ผลงาน AI CX Labs"></div>
+        <div class="gallery-item reveal"><img src="market-th.jpg" alt="Market Vision Thai"></div>
+        <div class="gallery-item reveal"><img src="market-en.jpg" alt="Market Vision English"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-content">
+      <div class="footer-logo">AI CX Labs</div>
+      <p class="footer-text">© 2026 AI CX Labs | โทนม่วงทองหรูหรา</p>
+    </div>
+  </footer>
+
+<script>
+// Reveal on scroll
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('active');
+    }
+  });
+}, { threshold: 0.1 });
+
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+  anchor.addEventListener('click', function (e) {
+    e.preventDefault();
+    const target = document.querySelector(this.getAttribute('href'));
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+});
+
+// Fallback for missing images to prevent broken image icons
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('img').forEach(img => {
+    img.addEventListener('error', function() {
+      const w = 1200, h = 750;
+      const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h}' viewBox='0 0 ${w} ${h}'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0%' stop-color='%234c1d95'/><stop offset='100%' stop-color='%231e1b4b'/></linearGradient></defs><rect width='100%' height='100%' fill='url(%23g)'/><rect x='20' y='20' width='${w-40}' height='${h-40}' rx='20' fill='none' stroke='%23d4af37' stroke-opacity='0.4' stroke-width='2' stroke-dasharray='8 8'/><g fill='%23d4af37' opacity='0.8' font-family='Prompt, sans-serif' text-anchor='middle'><text x='50%' y='45%' font-size='48' font-weight='600'>AI CX Labs</text><text x='50%' y='55%' font-size='24' opacity='0.6'>Agentic AI Showcase</text></g></svg>`;
+      this.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+      this.style.objectFit = 'cover';
+    }, { once: true });
+  });
+});
+</script>
 <script>(function(){document.addEventListener("click",function(e){var a=e.target.closest("[data-product-id]");if(!a)return;e.preventDefault();var pid=a.getAttribute("data-product-id");if(pid)parent.postMessage({type:"ecto-artifact-link-click",productId:pid},"*")})})();</script>
 </body>
 </html>
